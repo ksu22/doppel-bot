@@ -1,6 +1,5 @@
 from modal import Secret
 from datetime import datetime
-import os
 from math import ceil
 
 from .common import (
@@ -241,10 +240,10 @@ def _train(
     cloud="oci",
     allow_cross_region_volumes=True,
 )
-def finetune(user: str, team_id: str = ""):
+def finetune(user: str, samples_path: str):
     from datasets import load_dataset
 
-    data_path = user_data_path(user, team_id).as_posix()
+    data_path = user_data_path(samples_path).as_posix()
     data = load_dataset("json", data_files=data_path)
 
     num_samples = len(data["train"])
@@ -255,10 +254,10 @@ def finetune(user: str, team_id: str = ""):
         MODEL_PATH,
         data,
         val_set_size=val_set_size,
-        output_dir=user_model_path(user, team_id).as_posix(),
+        output_dir=user_model_path(user).as_posix(),
         wandb_project=WANDB_PROJECT,
-        wandb_run_name=f"openllama-{team_id}-{user}-{datetime.now().strftime('%Y-%m-%d-%H-%M')}",
+        wandb_run_name=f"openllama-{user}-{datetime.now().strftime('%Y-%m-%d-%H-%M')}",
     )
 
     # Delete scraped data after fine-tuning
-    os.remove(data_path)
+    # os.remove(data_path)

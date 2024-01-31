@@ -1,5 +1,3 @@
-from typing import Optional
-
 from modal import gpu, method
 
 from .common import (
@@ -17,7 +15,7 @@ from .common import (
     network_file_systems={VOL_MOUNT_PATH: output_vol},
 )
 class OpenLlamaModel():
-    def __init__(self, user: str, team_id: Optional[str] = None):
+    def __init__(self, user: str):
         import sys
 
         import torch
@@ -25,7 +23,7 @@ class OpenLlamaModel():
         from transformers import LlamaForCausalLM, LlamaTokenizer
 
         self.user = user
-        CHECKPOINT = user_model_path(self.user, team_id)
+        CHECKPOINT = user_model_path(self.user)
 
         load_8bit = False
         device = "cuda"
@@ -89,13 +87,12 @@ class OpenLlamaModel():
 @stub.local_entrypoint()
 def main(user: str):
     inputs = [
-        "Tell me about alpacas.",
-        "Tell me about the president of Mexico in 2019.",
+        "Tell me about Peter.",
+        "Tell me about climate technology.",
         "What should we do next? Who should work on this?",
         "What are your political views?",
         "What did you work on yesterday?",
         "@here is anyone in the office?",
-        "What did you think about the last season of Silicon Valley?",
         "Who are you?",
     ]
     model = OpenLlamaModel(user, None)
