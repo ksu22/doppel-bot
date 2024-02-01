@@ -2,14 +2,14 @@ from modal import Secret
 from datetime import datetime
 from math import ceil
 
-from .common import (
+from common import (
     MODEL_PATH,
     VOL_MOUNT_PATH,
     WANDB_PROJECT,
+    VOL_SAMPLES_PATH,
     generate_prompt,
-    output_vol,
+    vol,
     stub,
-    user_data_path,
     user_model_path,
 )
 
@@ -17,39 +17,39 @@ from .common import (
 # This code is adapter from https://github.com/tloen/alpaca-lora/blob/65fb8225c09af81feb5edb1abb12560f02930703/finetune.py
 # with modifications mainly to expose more parameters to the user.
 def _train(
-    # model/data params
-    base_model: str,
-    data,
-    output_dir: str = "./lora-alpaca",
-    eval_steps: int = 20,
-    save_steps: int = 20,
-    # training hyperparams
-    batch_size: int = 128,
-    micro_batch_size: int = 32,
-    max_steps: int = 200,
-    learning_rate: float = 3e-4,
-    cutoff_len: int = 512,
-    val_set_size: int = 100,
-    # lora hyperparams
-    lora_r: int = 16,
-    lora_alpha: int = 16,
-    lora_dropout: float = 0.05,
-    lora_target_modules=[
-        "q_proj",
-        "k_proj",
-        "v_proj",
-        "o_proj",
-    ],
-    # llm hyperparams
-    train_on_inputs: bool = True,  # if False, masks out inputs in loss
-    add_eos_token: bool = True,
-    group_by_length: bool = True,  # faster, but produces an odd training loss curve
-    # wandb params
-    wandb_project: str = "",
-    wandb_run_name: str = "",
-    wandb_watch: str = "",  # options: false | gradients | all
-    wandb_log_model: str = "",  # options: false | true
-    resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
+        # model/data params
+        base_model: str,
+        data,
+        output_dir: str = "./lora-alpaca",
+        eval_steps: int = 20,
+        save_steps: int = 20,
+        # training hyperparams
+        batch_size: int = 128,
+        micro_batch_size: int = 32,
+        max_steps: int = 200,
+        learning_rate: float = 3e-4,
+        cutoff_len: int = 512,
+        val_set_size: int = 100,
+        # lora hyperparams
+        lora_r: int = 16,
+        lora_alpha: int = 16,
+        lora_dropout: float = 0.05,
+        lora_target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+        ],
+        # llm hyperparams
+        train_on_inputs: bool = True,  # if False, masks out inputs in loss
+        add_eos_token: bool = True,
+        group_by_length: bool = True,  # faster, but produces an odd training loss curve
+        # wandb params
+        wandb_project: str = "",
+        wandb_run_name: str = "",
+        wandb_watch: str = "",  # options: false | gradients | all
+        wandb_log_model: str = "",  # options: false | true
+        resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
 ):
     import os
     import sys
@@ -107,9 +107,9 @@ def _train(
             return_tensors=None,
         )
         if (
-            result["input_ids"][-1] != tokenizer.eos_token_id
-            and len(result["input_ids"]) < cutoff_len
-            and add_eos_token
+                result["input_ids"][-1] != tokenizer.eos_token_id
+                and len(result["input_ids"]) < cutoff_len
+                and add_eos_token
         ):
             result["input_ids"].append(tokenizer.eos_token_id)
             result["attention_mask"].append(1)
@@ -233,22 +233,24 @@ def _train(
 
 @stub.function(
     gpu="A100",
-    # TODO: Modal should support optional secrets.
     secret=Secret.from_name("my-wandb-secret") if WANDB_PROJECT else None,
     timeout=60 * 60 * 2,
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
-    cloud="oci",
-    allow_cross_region_volumes=True,
+    volumes={VOL_MOUNT_PATH: vol},
 )
-def finetune(user: str, samples_path: str):
+def finetune(user: str):
     from datasets import load_dataset
+    vol.reload()
 
-    data_path = user_data_path(samples_path).as_posix()
+    data_path = VOL_SAMPLES_PATH.as_posix()
     data = load_dataset("json", data_files=data_path)
+    if len(data) == 0:
+        print(f"Failed to find data at `{data_path}`")
+        return
+    print(f"Data: {data}")
 
     num_samples = len(data["train"])
     val_set_size = ceil(0.1 * num_samples)
-    print(f"Loaded {num_samples} samples. ")
+    print(f"Loaded {num_samples} samples.")
 
     _train(
         MODEL_PATH,
@@ -258,6 +260,4 @@ def finetune(user: str, samples_path: str):
         wandb_project=WANDB_PROJECT,
         wandb_run_name=f"openllama-{user}-{datetime.now().strftime('%Y-%m-%d-%H-%M')}",
     )
-
-    # Delete scraped data after fine-tuning
-    # os.remove(data_path)
+    vol.commit()  # Needed to make sure all changes are persisted

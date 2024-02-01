@@ -1,15 +1,17 @@
-from modal import Image, Stub, NetworkFileSystem
-import random
+from modal import Image, Stub, Volume
 from typing import Optional
 from pathlib import Path
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = False
+vol = Volume.persisted("vol")
 
 WANDB_PROJECT = ""
 
 MODEL_PATH = "/model"
+
+LOCAL_DATA_PATH = "collected_data/conversations/J Squared Friendmoon.json"
+VOL_SAMPLES_PATH = VOL_MOUNT_PATH / "samples.json"
 
 
 def download_models():
@@ -52,14 +54,12 @@ openllama_image = (
 
 stub = Stub(name="doppel-bot", image=openllama_image)
 
-stub.slack_image = (
+stub.doppel_image = (
     Image.debian_slim()
     .apt_install("wget")
     .apt_install("libpq-dev")
     .pip_install("psycopg2")
 )
-
-output_vol = NetworkFileSystem.new(cloud="gcp").persisted("doppelbot-vol")
 
 
 def generate_prompt(user, input, output=""):
@@ -70,10 +70,6 @@ def generate_prompt(user, input, output=""):
 
 ### Response:
 {output}"""
-
-
-def user_data_path(samples_path: str) -> Path:
-    return VOL_MOUNT_PATH / samples_path
 
 
 def user_model_path(user: str, checkpoint: Optional[str] = None) -> Path:

@@ -1,39 +1,45 @@
 import time
 import re
+import json
 
 from fastapi import FastAPI
 
-from modal import Dict, Secret, asgi_app
+from modal import Dict, asgi_app
 
-from .common import (
-    MULTI_WORKSPACE_SLACK_APP,
+from common import (
     VOL_MOUNT_PATH,
-    output_vol,
+    LOCAL_DATA_PATH,
+    VOL_SAMPLES_PATH,
+    vol,
     stub, get_finished_user,
 )
-from .inference import OpenLlamaModel
-from .samples import create_samples
-from .finetune import finetune
-
-# Ephemeral caches
-stub.users_cache = Dict.new()
-stub.self_cache = Dict.new()
+from inference import OpenLlamaModel
+from finetune import finetune
 
 MAX_INPUT_LENGTH = 512  # characters, not tokens.
 # TODO(kevinsu): Remove usage
 SHARED_USER = "Josh"
 
+
+# Load the json data from the local FS to the Volume to provide access to subsequent functions.
+def load_local_data(user: str):
+    with open(LOCAL_DATA_PATH, 'r') as file:
+        text_list = [line.strip() for line in file]
+    data = []
+    for idx, response in enumerate(text_list[1:]):
+        data.append({"input": text_list[idx], "output": response, "user": user})
+    return data
+
+
+# TODO(kevinsu): Dont buffer finetune data in memory
+fine_tune_data = load_local_data(SHARED_USER)
+
+
 @stub.function(
-    image=stub.slack_image,
-    secrets=[
-        Secret.from_name("slack-finetune-secret"),
-        # TODO: Modal should support optional secrets.
-        *([Secret.from_name("neon-secret")] if MULTI_WORKSPACE_SLACK_APP else []),
-    ],
+    image=stub.doppel_image,
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
-    cloud="gcp",
+    volumes={VOL_MOUNT_PATH: vol},
     keep_warm=1,
 )
 @asgi_app(label="doppel")
@@ -47,7 +53,7 @@ def _asgi_app():
         user = SHARED_USER
         user = get_finished_user(user)
         if user is None:
-            print("No users trained yet. Run /api/doppel first.")
+            print("No users trained yet. Run /api/train first.")
             return
 
         model = OpenLlamaModel.remote(user)
@@ -69,6 +75,8 @@ def _asgi_app():
 
     @fastapi_app.post("/api/train")
     def train():
+        with open(VOL_SAMPLES_PATH, 'w') as file:
+            json.dump(fine_tune_data, file, indent=2)
         user = SHARED_USER
         user_pipeline.spawn(user)
 
@@ -76,22 +84,17 @@ def _asgi_app():
 
 
 @stub.function(
-    image=stub.slack_image,
-    # TODO: Modal should support optional secrets.
-    secret=Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None,
+    image=stub.doppel_image,
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
 )
 def user_pipeline(user: str):
     try:
-        file_path = "collected_data/conversations/J Squared Friendmoon.json"
-        print(f"Loading samples from `{file_path}`")
-        # TODO(kevinsu): Support different users
-        user = SHARED_USER
-        samples_path = create_samples(file_path, user)
+        vol.persist()
+        print(f"Successfully loaded data to persistent volume at {VOL_SAMPLES_PATH}")
         t0 = time.time()
 
-        finetune.call(user, samples_path)
+        finetune.call(user, VOL_SAMPLES_PATH)
 
         print(f"Finished training {user} after {time.time() - t0:.2f} seconds.")
     except Exception as e:
