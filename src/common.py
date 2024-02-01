@@ -1,16 +1,19 @@
-from modal import Image, Stub, Volume
+from modal import Image, Stub, NetworkFileSystem
 from typing import Optional
 from pathlib import Path
 
 VOL_MOUNT_PATH = Path("/vol")
 
-vol = Volume.persisted("vol")
+vol = NetworkFileSystem.persisted("vol")
 
 WANDB_PROJECT = ""
 
 MODEL_PATH = "/model"
 
-LOCAL_DATA_PATH = "collected_data/conversations/J Squared Friendmoon.json"
+DATA_FILENAME = "J Squared Friendmoon.json"
+LOCAL_DATA_DIR = Path("collected_data/conversations")
+LOCAL_DATA_PATH = LOCAL_DATA_DIR / DATA_FILENAME
+MOUNT_DATA_DIR = Path("/mounted")
 VOL_SAMPLES_PATH = VOL_MOUNT_PATH / "samples.json"
 
 
@@ -19,11 +22,15 @@ def download_models():
 
     model_name = "openlm-research/open_llama_7b"
 
+    print("Downloading LlamaForCausalLM...")
     model = LlamaForCausalLM.from_pretrained(model_name)
     model.save_pretrained(MODEL_PATH)
+    print("Done")
 
+    print("Downloading LlamaTokenizer...")
     tokenizer = LlamaTokenizer.from_pretrained(model_name)
     tokenizer.save_pretrained(MODEL_PATH)
+    print("Done")
 
 
 openllama_image = (
@@ -39,7 +46,7 @@ openllama_image = (
         "accelerate==0.18.0",
         "bitsandbytes==0.37.0",
         "bitsandbytes-cuda117==0.26.0.post2",
-        "datasets==2.10.1",
+        "datasets==2.14.6",
         "fire==0.5.0",
         "gradio==3.23.0",
         "peft @ git+https://github.com/huggingface/peft.git@e536616888d51b453ed354a6f1e243fecb02ea08",

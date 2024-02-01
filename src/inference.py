@@ -3,8 +3,8 @@ from modal import gpu, method
 from .common import (
     MODEL_PATH,
     generate_prompt,
-    output_vol,
     stub,
+    vol,
     VOL_MOUNT_PATH,
     user_model_path,
 )
@@ -12,9 +12,9 @@ from .common import (
 
 @stub.cls(
     gpu=gpu.A100(memory=40),
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
+    network_file_systems={VOL_MOUNT_PATH: vol},
 )
-class OpenLlamaModel():
+class OpenLlamaModel:
     def __init__(self, user: str):
         import sys
 
@@ -54,10 +54,10 @@ class OpenLlamaModel():
 
     @method()
     def generate(
-        self,
-        input: str,
-        max_new_tokens=128,
-        **kwargs,
+            self,
+            input: str,
+            max_new_tokens=128,
+            **kwargs,
     ):
         import torch
         from transformers import GenerationConfig

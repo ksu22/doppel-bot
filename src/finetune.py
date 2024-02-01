@@ -1,8 +1,9 @@
 from modal import Secret
 from datetime import datetime
 from math import ceil
+import os
 
-from common import (
+from .common import (
     MODEL_PATH,
     VOL_MOUNT_PATH,
     WANDB_PROJECT,
@@ -235,12 +236,13 @@ def _train(
     gpu="A100",
     secret=Secret.from_name("my-wandb-secret") if WANDB_PROJECT else None,
     timeout=60 * 60 * 2,
-    volumes={VOL_MOUNT_PATH: vol},
+    network_file_systems={VOL_MOUNT_PATH: vol},
 )
 def finetune(user: str):
     from datasets import load_dataset
-    vol.reload()
 
+    print(os.listdir("/"))
+    print(os.listdir("/vol"))
     data_path = VOL_SAMPLES_PATH.as_posix()
     data = load_dataset("json", data_files=data_path)
     if len(data) == 0:
@@ -260,4 +262,3 @@ def finetune(user: str):
         wandb_project=WANDB_PROJECT,
         wandb_run_name=f"openllama-{user}-{datetime.now().strftime('%Y-%m-%d-%H-%M')}",
     )
-    vol.commit()  # Needed to make sure all changes are persisted
